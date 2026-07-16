@@ -1,0 +1,4 @@
+interface:
+  display_name: "隐患辅助评估"
+  short_description: "读取已登记隐患，执行方法论并输出可回填的明确评估结论"
+  default_prompt: "使用 $rht-hidden-trouble-rules，读取当前已登记隐患和实体定义，执行六步隐患评估方法论并输出可回填的评估结论，仅在我确认后保存。"
