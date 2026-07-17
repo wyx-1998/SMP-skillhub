@@ -28,9 +28,8 @@ case "$CODE" in
         ;;
     200|301|302|307|308|401|403|405)
         echo "ALIVE 服务正常运行（HTTP $CODE）"
-        echo "INFO 端点可用列表："
-        echo "      POST /ImageReco_HiddenDanger/   (JSON, imgfile=)"
-        echo "      POST /streaming/hidden_danger   (文本, image_file=)"
+        echo "INFO 本技能使用端点："
+        echo "      POST /streaming/hidden_danger   (流式文本, image_file=)"
         exit 0
         ;;
     404)

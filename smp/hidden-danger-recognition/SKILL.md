@@ -4,6 +4,7 @@ description: 安全隐患图像识别。
 requires:
   - smp-root-rules
 
+
 ---
 
 # 安全隐患图像识别
@@ -57,12 +58,12 @@ bash scripts/check-server.sh http://101.204.230.42:2044
 
 预期输出说明：
 
-| 输出前缀 | 含义 | 下一步 |
-|---------|------|--------|
-| `ALIVE` | 服务正常运行 | 继续上传 |
-| `WARN` | TCP 通但 HTTP 无响应 | 等一会重试，或联系运维重启服务 |
-| `INFO` | 端点 404 / 其他状态码 | 用端点发现技巧找到正确路径 |
-| `FAIL` | 服务完全不可用 | 停止，报告用户 |
+| 输出前缀 | 含义                  | 下一步                         |
+| -------- | --------------------- | ------------------------------ |
+| `ALIVE`  | 服务正常运行          | 继续上传                       |
+| `WARN`   | TCP 通但 HTTP 无响应  | 等一会重试，或联系运维重启服务 |
+| `INFO`   | 端点 404 / 其他状态码 | 用端点发现技巧找到正确路径     |
+| `FAIL`   | 服务完全不可用        | 停止，报告用户                 |
 
 ## 端点发现技巧
 
@@ -88,18 +89,7 @@ for path, methods in d.get('paths', {}).items():
 
 ## 请求
 
-### 端点一：`/ImageReco_HiddenDanger/`（推荐 — 结构化 JSON）
-
-返回结构化的 `analysisDetails.content` 数组，每项含 `description` + `request`，干净无重复。
-
-```bash
-curl -X POST http://101.204.230.42:2044/ImageReco_HiddenDanger/ \
-  -F "imgfile=@<文件路径>" \
-  --connect-timeout 30 \
-  --max-time 120
-```
-
-### 端点二：`/streaming/hidden_danger`（含法规依据）
+### 流式端点：`/streaming/hidden_danger`（含法规依据）
 
 返回纯文本，每条带隐患依据国标/行标引用，但重复项较多。
 
@@ -110,49 +100,17 @@ curl -X POST http://101.204.230.42:2044/streaming/hidden_danger \
   --max-time 120
 ```
 
-**选择建议：** 需要机器处理 → 用端点一（JSON 直接解析）；需要追溯法规依据 → 用端点二（含标准条款）。
-
-### 带知识库的识别端点
-
-额外支持 `pdf_id_list` 参数，将识别结果与知识库文档关联：
-
-```bash
-curl -X POST http://101.204.230.42:2044/streaming/hidden_danger_knowledge_base \
-  -F "image_file=@<文件路径>" \
-  -F 'pdf_id_list=["doc_id_1","doc_id_2"]' \
-  --connect-timeout 30 \
-  --max-time 120
-```
+本技能只调用该流式端点，上传字段固定为 `image_file`。
 
 ## 结果解析
 
-| 条件 | 处理 |
-|------|------|
-| HTTP 非 200 | 返回错误 |
-| 200 响应为 JSON（端点一/旧版） | 取 `analysisDetails.content` 数组 |
-| 200 响应无隐患（JSON 中 `no_split` 含关键词） | 返回空结果 `summary: "未识别到安全隐患"` |
-| 200 响应为纯文本编号列表（端点二） | `data` = 逐项拆解为数组 |
+| 条件                                    | 处理                                     |
+| --------------------------------------- | ---------------------------------------- |
+| HTTP 非 200                             | 返回错误                                 |
+| 200 响应无隐患（文本含 `没有安全隐患`） | 返回空结果 `summary: "未识别到安全隐患"` |
+| 200 响应为纯文本编号列表                | `data` = 逐项拆解为数组                  |
 
-### 格式一：JSON（端点一 `/ImageReco_HiddenDanger/`）
-
-```json
-{
-  "name": "文件名",
-  "analysisDetails": {
-    "description": "",
-    "no_split": "汇总文本（可能为空）",
-    "content": [
-      {"description": "隐患描述", "request": "整改建议"},
-      ...
-    ],
-    "time_consuming": 5.09
-  }
-}
-```
-
-`data` = `content` 数组。`no_split` 若含"没有安全隐患"则无结果。
-
-### 格式二：纯文本（端点二 `/streaming/hidden_danger`）
+### 响应格式
 
 每项格式如下：
 
@@ -172,11 +130,10 @@ curl -X POST http://101.204.230.42:2044/streaming/hidden_danger_knowledge_base \
 
 ### 已知问题
 
-- **重复项较多**（端点二）：同一张图可能产出大量相似项，输出时需要去重或汇总。
-- **文本截断**（端点二）：响应可能被后端截断，接收时要判断是否完整。
-- 端点一 JSON 输出干净无重复，推荐程序化使用。
+- **重复项较多**：同一张图可能产出大量相似项，输出时需要去重或汇总。
+- **文本截断**：响应可能被后端截断，接收时要判断是否完整。
 
-### 纯文本→结构化（端点二专用）
+### 纯文本→结构化
 
 ```python
 import re
@@ -199,8 +156,53 @@ def parse_hidden_danger_response(text: str) -> list[dict]:
 
 ## 输出
 
-`summary`：识别结果摘要（首项描述或错误信息）。`data`：结构化数组 `[{description, request}]`（纯文本解析后），失败时为 `[]`。`standard` 字段（法规依据）存在时保留在 data 中。
+### 输出契约
+
+`summary`：识别结果摘要（首项描述或错误信息）。
+`data`：结构化数组 `[{description, request}]`（纯文本解析后），失败时为 `[]`。`standard` 字段（法规依据）存在时保留在 data 中。
 
 `button`：按钮数组，输出 `[{"label":"去随手拍登记","value":"setDescription"}]`。
 
-其余遵守 `smp-root-rules`。
+
+### 输出规则
+
+1. 先输出 `<RESULT_JSON>`，里面只放机器可读的 `summary / data / button`。
+2. `</RESULT_JSON>` 后空一行，继续输出 Markdown。
+3. Markdown 只展示 `summary` + 每条 `data` 的可读内容，不写 `button`。
+4. 下游解析时按“先取 JSON 块，剩余文本当 MD”处理。
+
+示例：
+
+```
+<RESULT_JSON>
+{
+  "summary": "识别到 2 项隐患",
+  "data": [
+    {
+      "description": "管道未固定，存在跌落风险",
+      "request": "固定管道",
+      "standard": "..."
+    },
+    {
+      "description": "地面有杂物，存在绊倒风险",
+      "request": "清理地面杂物",
+      "standard": "..."
+    }
+  ],
+  "button": [
+    {"label": "去随手拍登记", "value": "setDescription"}
+  ]
+}
+</RESULT_JSON>
+
+### 识别结果
+识别到 2 项隐患。
+
+1. 管道未固定，存在跌落风险  
+整改建议：固定管道  
+法规依据：...
+
+2. 地面有杂物，存在绊倒风险  
+整改建议：清理地面杂物  
+法规依据：...
+```
